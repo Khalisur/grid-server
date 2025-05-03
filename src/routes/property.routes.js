@@ -6,12 +6,16 @@ const auth = require('../middleware/auth.middleware');
 // Public routes
 router.get('/', propertyController.getAllProperties);
 router.get('/for-sale', propertyController.getPropertiesForSale);
-router.get('/:id', propertyController.getPropertyById);
 
 // Protected routes
-router.post('/', auth, propertyController.createProperty);
+router.post('/unallocated/buy', auth, propertyController.buyUnallocatedProperty);
 router.get('/user/my-properties', auth, propertyController.getUserProperties);
+router.post('/', auth, propertyController.createProperty);
+
+// Routes with path parameters (these should come after more specific routes)
+router.get('/:id', propertyController.getPropertyById);
 router.put('/:id', auth, propertyController.updateProperty);
 router.delete('/:id', auth, propertyController.deleteProperty);
+router.post('/:id/buy', auth, propertyController.buyProperty);
 
 module.exports = router; 
