@@ -32,7 +32,7 @@ exports.createUser = async (req, res) => {
       uid,
       email,
       name: name || 'User',
-      tokens: 480
+      tokens: 10
     });
 
     await user.save();
