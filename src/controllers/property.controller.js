@@ -313,25 +313,26 @@ exports.buyUnallocatedProperty = async (req, res) => {
       });
     }
     
-    // Check if any of the cells are already owned
-    const existingProperties = await Property.find({ 
-      cells: { $in: cells } 
-    });
+    // Comprehensive check to ensure NO cell in the requested array exists in ANY property
+    const existingCells = [];
     
+    // Create a query to find any properties that contain any of the requested cells
+    const cellQuery = cells.map(cell => ({ cells: cell }));
+    const existingProperties = await Property.find({ $or: cellQuery });
+    
+    // If we found any properties with matching cells, build a list of which cells are taken
     if (existingProperties.length > 0) {
-      // Find which cells are already owned
-      const ownedCells = new Set();
-      existingProperties.forEach(property => {
-        property.cells.forEach(cell => {
-          if (cells.includes(cell)) {
-            ownedCells.add(cell);
+      for (const property of existingProperties) {
+        for (const cell of property.cells) {
+          if (cells.includes(cell) && !existingCells.includes(cell)) {
+            existingCells.push(cell);
           }
-        });
-      });
+        }
+      }
       
       return res.status(400).json({ 
         message: 'Some cells are already owned by other users',
-        ownedCells: Array.from(ownedCells)
+        ownedCells: existingCells
       });
     }
     
