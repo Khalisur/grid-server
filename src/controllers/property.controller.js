@@ -407,4 +407,239 @@ exports.buyUnallocatedProperty = async (req, res) => {
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
+};
+
+// Place a bid on a property
+exports.placeBid = async (req, res) => {
+  try {
+    const { amount, message } = req.body;
+    
+    // Validate the bid amount
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return res.status(400).json({ 
+        message: 'Invalid bid amount. Please provide a positive number',
+        receivedData: req.body 
+      });
+    }
+    
+    // Find the property by ID
+    const property = await Property.findOne({ id: req.params.id });
+    
+    if (!property) {
+      return res.status(404).json({ message: 'Property not found' });
+    }
+    
+    // Check if user is trying to bid on their own property
+    if (property.owner === req.user.uid) {
+      return res.status(400).json({ message: 'You cannot bid on your own property' });
+    }
+    
+    // Check if user has enough tokens for the bid
+    const bidder = await User.findOne({ uid: req.user.uid });
+    if (!bidder) {
+      return res.status(404).json({ message: 'Bidder not found' });
+    }
+    
+    if (bidder.tokens < amount) {
+      return res.status(400).json({ 
+        message: 'Insufficient tokens for this bid', 
+        required: amount, 
+        available: bidder.tokens 
+      });
+    }
+    
+    // Check if user already has a bid on this property
+    const existingBidIndex = property.bids.findIndex(bid => bid.userId === req.user.uid);
+    
+    if (existingBidIndex !== -1) {
+      // Update existing bid
+      property.bids[existingBidIndex] = {
+        userId: req.user.uid,
+        amount,
+        message: message || '',
+        createdAt: new Date()
+      };
+    } else {
+      // Add new bid
+      property.bids.push({
+        userId: req.user.uid,
+        amount,
+        message: message || '',
+        createdAt: new Date()
+      });
+    }
+    
+    await property.save();
+    
+    res.status(200).json({
+      message: 'Bid placed successfully',
+      bid: {
+        userId: req.user.uid,
+        amount,
+        message: message || '',
+        propertyId: property.id
+      }
+    });
+  } catch (error) {
+    console.error('Error placing bid:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Accept a bid on a property
+exports.acceptBid = async (req, res) => {
+  try {
+    const { bidUserId } = req.body;
+    
+    if (!bidUserId) {
+      return res.status(400).json({ 
+        message: 'Missing bidUserId parameter',
+        receivedData: req.body 
+      });
+    }
+    
+    // Find the property by ID
+    const property = await Property.findOne({ id: req.params.id });
+    
+    if (!property) {
+      return res.status(404).json({ message: 'Property not found' });
+    }
+    
+    // Check if the user is the owner of the property
+    if (property.owner !== req.user.uid) {
+      return res.status(403).json({ message: 'Not authorized to accept bids on this property' });
+    }
+    
+    // Find the specified bid
+    const bidIndex = property.bids.findIndex(bid => bid.userId === bidUserId);
+    
+    if (bidIndex === -1) {
+      return res.status(404).json({ message: 'Bid not found' });
+    }
+    
+    const bid = property.bids[bidIndex];
+    
+    // Get the buyer
+    const buyer = await User.findOne({ uid: bid.userId });
+    if (!buyer) {
+      return res.status(404).json({ message: 'Buyer not found' });
+    }
+    
+    // Check if buyer still has enough tokens
+    if (buyer.tokens < bid.amount) {
+      return res.status(400).json({ 
+        message: 'Buyer has insufficient tokens', 
+        required: bid.amount, 
+        available: buyer.tokens 
+      });
+    }
+    
+    // Get the seller (current owner)
+    const seller = await User.findOne({ uid: property.owner });
+    if (!seller) {
+      return res.status(404).json({ message: 'Seller not found' });
+    }
+    
+    // Start transaction to ensure all operations succeed or fail together
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
+    try {
+      const oldOwnerId = property.owner;
+      const propertyId = property._id;
+      
+      // Transfer property ownership
+      await Property.findOneAndUpdate(
+        { id: req.params.id },
+        { 
+          $set: { 
+            owner: bid.userId,
+            forSale: false,
+            bids: [] // Clear all bids after accepting one
+          } 
+        },
+        { session }
+      );
+      
+      // Remove property from seller's properties array
+      await User.findOneAndUpdate(
+        { uid: oldOwnerId },
+        { $pull: { properties: propertyId } },
+        { session }
+      );
+      
+      // Add property to buyer's properties array
+      await User.findOneAndUpdate(
+        { uid: bid.userId },
+        { $push: { properties: propertyId } },
+        { session }
+      );
+      
+      // Transfer tokens from buyer to seller
+      await User.findOneAndUpdate(
+        { uid: bid.userId },
+        { $inc: { tokens: -bid.amount } },
+        { session }
+      );
+      
+      await User.findOneAndUpdate(
+        { uid: oldOwnerId },
+        { $inc: { tokens: bid.amount } },
+        { session }
+      );
+      
+      // Commit transaction
+      await session.commitTransaction();
+      session.endSession();
+      
+      res.status(200).json({
+        message: 'Bid accepted successfully',
+        transaction: {
+          propertyId: property.id,
+          previousOwner: oldOwnerId,
+          newOwner: bid.userId,
+          price: bid.amount
+        }
+      });
+    } catch (error) {
+      // Abort transaction on error
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error accepting bid:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Get all bids for a property
+exports.getPropertyBids = async (req, res) => {
+  try {
+    const property = await Property.findOne({ id: req.params.id });
+    
+    if (!property) {
+      return res.status(404).json({ message: 'Property not found' });
+    }
+    
+    // Only the owner can see all bids
+    if (property.owner !== req.user.uid) {
+      return res.status(403).json({ message: 'Not authorized to view all bids on this property' });
+    }
+    
+    res.status(200).json({
+      propertyId: property.id,
+      bids: property.bids
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
 }; 

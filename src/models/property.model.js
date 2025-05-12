@@ -37,7 +37,27 @@ const propertySchema = new mongoose.Schema({
   salePrice: {
     type: Number,
     default: 0
-  }
+  },
+  bids: [
+    {
+      userId: {
+        type: String,
+        required: true
+      },
+      amount: {
+        type: Number,
+        required: true
+      },
+      message: {
+        type: String,
+        default: ''
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }
+  ]
 }, {
   timestamps: true
 });

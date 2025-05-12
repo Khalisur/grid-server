@@ -12,6 +12,11 @@ router.post('/unallocated/buy', auth, propertyController.buyUnallocatedProperty)
 router.get('/user/my-properties', auth, propertyController.getUserProperties);
 router.post('/', auth, propertyController.createProperty);
 
+// Bidding routes
+router.post('/:id/bid', auth, propertyController.placeBid);
+router.post('/:id/bid/accept', auth, propertyController.acceptBid);
+router.get('/:id/bids', auth, propertyController.getPropertyBids);
+
 // Routes with path parameters (these should come after more specific routes)
 router.get('/:id', propertyController.getPropertyById);
 router.put('/:id', auth, propertyController.updateProperty);
