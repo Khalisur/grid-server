@@ -138,4 +138,36 @@ exports.deleteUser = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
+};
+
+// Get all users with their properties
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({});
+    
+    // Create an array to hold user data with populated properties
+    const usersWithProperties = [];
+    
+    // For each user, find their properties and add to the result
+    for (const user of users) {
+      const properties = await Property.find({ owner: user.uid });
+      
+      usersWithProperties.push({
+        id: user.id,
+        uid: user.uid,
+        email: user.email,
+        name: user.name,
+        tokens: user.tokens,
+        properties
+      });
+    }
+    
+    res.status(200).json(usersWithProperties);
+  } catch (error) {
+    console.error('Error fetching all users:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
 }; 

@@ -5,9 +5,10 @@ const auth = require('../middleware/auth.middleware');
 
 // Public routes - for Firebase-authenticated users
 router.post('/create', userController.createUser);
+router.get('/all', userController.getAllUsers);
 
 // Protected routes
-router.get('/profile', auth, userController.getProfile);
+router.get('/profile', auth,userController.getProfile);
 router.put('/update', auth, userController.updateUser);
 router.delete('/delete', auth, userController.deleteUser);
 
