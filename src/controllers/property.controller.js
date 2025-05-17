@@ -850,4 +850,107 @@ exports.cancelBid = async (req, res) => {
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
+};
+
+// Get all bids (offers) made by the current user
+exports.getUserBids = async (req, res) => {
+  try {
+    // Find all properties with bids from this user
+    const properties = await Property.find({
+      'bids.userId': req.user.uid
+    });
+    
+    if (!properties || properties.length === 0) {
+      return res.status(200).json({
+        message: 'No bids found',
+        bids: []
+      });
+    }
+    
+    // Extract relevant bid information
+    const userBids = [];
+    
+    for (const property of properties) {
+      const propertyBids = property.bids.filter(bid => bid.userId === req.user.uid);
+      
+      for (const bid of propertyBids) {
+        userBids.push({
+          propertyId: property.id,
+          propertyName: property.name,
+          propertyOwner: property.owner,
+          bid: {
+            amount: bid.amount,
+            message: bid.message,
+            status: bid.status,
+            createdAt: bid.createdAt
+          }
+        });
+      }
+    }
+    
+    res.status(200).json({
+      userId: req.user.uid,
+      bidsCount: userBids.length,
+      bids: userBids
+    });
+  } catch (error) {
+    console.error('Error getting user bids:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Get all bids (offers) received on properties owned by the current user
+exports.getReceivedBids = async (req, res) => {
+  try {
+    // Find all properties owned by this user
+    const properties = await Property.find({
+      owner: req.user.uid
+    });
+    
+    if (!properties || properties.length === 0) {
+      return res.status(200).json({
+        message: 'No properties or bids found',
+        bids: []
+      });
+    }
+    
+    // Extract relevant bid information
+    const receivedBids = [];
+    
+    for (const property of properties) {
+      // Skip properties with no bids
+      if (!property.bids || property.bids.length === 0) continue;
+      
+      for (const bid of property.bids) {
+        receivedBids.push({
+          propertyId: property.id,
+          propertyName: property.name,
+          bid: {
+            userId: bid.userId,
+            amount: bid.amount,
+            message: bid.message,
+            status: bid.status,
+            createdAt: bid.createdAt
+          }
+        });
+      }
+    }
+    
+    res.status(200).json({
+      userId: req.user.uid,
+      bidsCount: receivedBids.length,
+      bids: receivedBids
+    });
+  } catch (error) {
+    console.error('Error getting received bids:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 }; 

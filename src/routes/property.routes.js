@@ -12,6 +12,10 @@ router.post('/unallocated/buy', auth, propertyController.buyUnallocatedProperty)
 router.get('/user/my-properties', auth, propertyController.getUserProperties);
 router.post('/', auth, propertyController.createProperty);
 
+// User bid dashboard routes
+router.get('/bids/made', auth, propertyController.getUserBids);
+router.get('/bids/received', auth, propertyController.getReceivedBids);
+
 // Bidding routes
 router.post('/:id/bid', auth, propertyController.placeBid);
 router.post('/:id/bid/accept', auth, propertyController.acceptBid);
