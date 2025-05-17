@@ -52,6 +52,11 @@ const propertySchema = new mongoose.Schema({
         type: String,
         default: ''
       },
+      status: {
+        type: String,
+        enum: ['active', 'accepted', 'declined', 'cancelled'],
+        default: 'active'
+      },
       createdAt: {
         type: Date,
         default: Date.now

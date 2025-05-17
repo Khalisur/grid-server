@@ -15,6 +15,8 @@ router.post('/', auth, propertyController.createProperty);
 // Bidding routes
 router.post('/:id/bid', auth, propertyController.placeBid);
 router.post('/:id/bid/accept', auth, propertyController.acceptBid);
+router.post('/:id/bid/decline', auth, propertyController.declineBid);
+router.post('/:id/bid/cancel', auth, propertyController.cancelBid);
 router.get('/:id/bids', auth, propertyController.getPropertyBids);
 
 // Routes with path parameters (these should come after more specific routes)
