@@ -953,4 +953,45 @@ exports.getReceivedBids = async (req, res) => {
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
+};
+
+// Calculate base price by property
+exports.calculateBasePriceByProperty = async (req, res) => {
+  try {
+    const { location, cellCount } = req.body;
+
+    // Validate that required data was provided
+    if (!location || !location.country) {
+      return res.status(400).json({ 
+        message: 'Valid location information is required',
+        receivedData: req.body 
+      });
+    }
+
+    if (!cellCount || isNaN(cellCount) || cellCount <= 0) {
+      return res.status(400).json({ 
+        message: 'Valid cellCount is required',
+        receivedData: req.body 
+      });
+    }
+
+    // Import geo service for calculations
+    const geoService = require('../services/geo.service');
+
+    // Calculate price based on location and cell count
+    const priceData = geoService.calculateBasePrice(location, parseInt(cellCount));
+
+    // Return calculated price data
+    res.status(200).json({
+      message: 'Base price calculated successfully',
+      ...priceData
+    });
+  } catch (error) {
+    console.error('Error calculating base price:', error);
+    res.status(500).json({ 
+      message: 'Server error while calculating base price', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 }; 

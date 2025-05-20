@@ -698,4 +698,79 @@ Firebase-UID: d7yZVWdS8fd8jnxLYdw6SDEemMo2
   "message": "Server error",
   "error": "Error message details"
 }
+```
+
+---
+
+### Calculate Base Price by Property
+
+Calculate the base price for a property based on its location and number of cells.
+
+- **URL**: `/properties/calculate-price`
+- **Method**: `POST`
+- **Auth Required**: No
+- **Content-Type**: `application/json`
+
+**Request Body:**
+
+```json
+{
+  "location": {
+    "city": "New York City",
+    "country": "USA",
+    "timezone": "America/New_York"
+  },
+  "cellCount": 5
+}
+```
+
+**Success Response:**
+
+- **Code**: 200 OK
+- **Content**: 
+```json
+{
+  "message": "Base price calculated successfully",
+  "basePrice": 50,
+  "locationMultiplier": 1.5,
+  "finalPrice": 75
+}
+```
+
+**Error Response:**
+
+- **Code**: 400 Bad Request
+- **Content**: 
+```json
+{
+  "message": "Valid location information is required",
+  "receivedData": {
+    "cellCount": 5
+  }
+}
+```
+
+OR
+
+```json
+{
+  "message": "Valid cellCount is required",
+  "receivedData": {
+    "location": {
+      "city": "New York City",
+      "country": "USA"
+    }
+  }
+}
+```
+
+OR
+
+- **Code**: 500 Server Error
+- **Content**: 
+```json
+{
+  "message": "Server error while calculating base price",
+  "error": "Error message details"
+}
 ``` 

@@ -6,6 +6,7 @@ const auth = require('../middleware/auth.middleware');
 // Public routes
 router.get('/', propertyController.getAllProperties);
 router.get('/for-sale', propertyController.getPropertiesForSale);
+router.post('/calculate-price', propertyController.calculateBasePriceByProperty);
 
 // Protected routes
 router.post('/unallocated/buy', auth, propertyController.buyUnallocatedProperty);
