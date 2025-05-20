@@ -10,6 +10,9 @@ dotenv.config();
 // Import routes
 const userRoutes = require('./routes/user.routes');
 const propertyRoutes = require('./routes/property.routes');
+const countryRoutes = require('./routes/country.routes');
+const cityRoutes = require('./routes/city.routes');
+const priceRoutes = require('./routes/price.routes');
 
 // Initialize app
 const app = express();
@@ -23,6 +26,9 @@ app.use(morgan('dev'));
 // Routes
 app.use('/api/users', userRoutes);
 app.use('/api/properties', propertyRoutes);
+app.use('/api/countries', countryRoutes);
+app.use('/api/cities', cityRoutes);
+app.use('/api/price', priceRoutes);
 
 // Root route
 app.get('/', (req, res) => {
