@@ -45,7 +45,8 @@ exports.createUser = async (req, res) => {
         uid: user.uid,
         email: user.email,
         name: user.name,
-        tokens: user.tokens
+        tokens: user.tokens,
+        isAdmin: user.isAdmin
       }
     });
   } catch (error) {
@@ -77,6 +78,7 @@ exports.getProfile = async (req, res) => {
       email: user.email,
       name: user.name,
       tokens: user.tokens,
+      isAdmin: user.isAdmin,
       properties
     });
   } catch (error) {
@@ -114,7 +116,8 @@ exports.updateUser = async (req, res) => {
         uid: user.uid,
         email: user.email,
         name: user.name,
-        tokens: user.tokens
+        tokens: user.tokens,
+        isAdmin: user.isAdmin
       }
     });
   } catch (error) {
@@ -158,6 +161,7 @@ exports.getAllUsers = async (req, res) => {
         email: user.email,
         name: user.name,
         tokens: user.tokens,
+        isAdmin: user.isAdmin,
         properties
       });
     }

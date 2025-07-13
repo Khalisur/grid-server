@@ -1,5 +1,7 @@
 const Property = require('../models/property.model');
 const User = require('../models/user.model');
+const City = require('../models/city.model');
+const Country = require('../models/country.model');
 const mongoose = require('mongoose');
 
 // Create a new property
@@ -296,7 +298,7 @@ exports.buyProperty = async (req, res) => {
 exports.buyUnallocatedProperty = async (req, res) => {
   try {
     // Extract and validate the required data
-    const { cells, price } = req.body;
+    const { cells, price, address } = req.body;
     console.log('Buying unallocated property with data:', req.body);
     
     if (!cells || !Array.isArray(cells) || cells.length === 0) {
@@ -311,6 +313,55 @@ exports.buyUnallocatedProperty = async (req, res) => {
         message: 'Invalid price. Price must be a positive number',
         receivedData: req.body 
       });
+    }
+    
+    // Check availability if address is provided
+    if (address) {
+      const addressLower = address.toLowerCase();
+      console.log('Address:', addressLower);
+      
+      // First try to find a matching city
+      const cities = await City.find();
+      const matchingCity = cities.find(city => {
+        const cityNameLower = city.name.toLowerCase();
+        return addressLower.includes(cityNameLower);
+      });
+      console.log('Matching city:', matchingCity);
+      
+      
+      if (matchingCity) {
+        const isAvailable = matchingCity.isAvailable && matchingCity.isActive;
+        if (!isAvailable) {
+          return res.status(403).json({
+            message: 'Property purchases are currently disabled for this city',
+            location: matchingCity.name,
+            reason: matchingCity.disabledReason,
+            disabledBy: matchingCity.disabledBy,
+            disabledAt: matchingCity.disabledAt
+          });
+        }
+      } else {
+        // If no city match, try to find a matching country
+        const countries = await Country.find();
+        const matchingCountry = countries.find(country => {
+          const countryNameLower = country.name.toLowerCase();
+          return addressLower.includes(countryNameLower);
+        });
+        console.log('Matching country:', matchingCountry);
+        
+        if (matchingCountry) {
+          const isAvailable = matchingCountry.isAvailable && matchingCountry.isActive;
+          if (!isAvailable) {
+            return res.status(403).json({
+              message: 'Property purchases are currently disabled for this country',
+              location: matchingCountry.name,
+              reason: matchingCountry.disabledReason,
+              disabledBy: matchingCountry.disabledBy,
+              disabledAt: matchingCountry.disabledAt
+            });
+          }
+        }
+      }
     }
     
     // Check maximum cell size limit
