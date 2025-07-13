@@ -32,7 +32,13 @@ Create a `.env` file in the root directory with the following content:
 ```
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/grid-map
 PORT=5000
+MAX_CELL_SIZE=100
+MAX_PRICE=10000
 ```
+
+Optional Environment Variables:
+- `MAX_CELL_SIZE`: Maximum number of cells a user can buy in a single unallocated property purchase (default: 100)
+- `MAX_PRICE`: Maximum price a user can spend on a single unallocated property purchase (default: 10000)
 
 4. Start the server
 ```bash

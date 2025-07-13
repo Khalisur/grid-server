@@ -313,6 +313,27 @@ exports.buyUnallocatedProperty = async (req, res) => {
       });
     }
     
+    // Check maximum cell size limit
+    const maxCellSize = parseInt(process.env.MAX_CELL_SIZE) || 100; // Default to 100 if not set
+    if (cells.length > maxCellSize) {
+      console.log('Maximum cell size exceeded:', cells.length, '>', maxCellSize);
+      return res.status(400).json({ 
+        message: `Maximum cell size exceeded. You can only buy up to ${maxCellSize} cells at once`,
+        requestedCells: cells.length,
+        maxAllowed: maxCellSize
+      });
+    }
+    
+    // Check maximum price limit
+    const maxPrice = parseInt(process.env.MAX_PRICE) || 10000; // Default to 10000 if not set
+    if (price > maxPrice) {
+      return res.status(400).json({ 
+        message: `Maximum price exceeded. You can only spend up to ${maxPrice} tokens`,
+        requestedPrice: price,
+        maxAllowed: maxPrice
+      });
+    }
+    
     // Comprehensive check to ensure NO cell in the requested array exists in ANY property
     const existingCells = [];
     
