@@ -7,6 +7,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "seed": "node src/seed.js",
+    "set-admin": "node src/scripts/set-admin.js",
+    "test-admin": "node src/scripts/test-admin-bypass.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

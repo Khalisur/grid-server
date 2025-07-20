@@ -1,5 +1,6 @@
 const City = require('../models/city.model');
 const Country = require('../models/country.model');
+const User = require('../models/user.model');
 
 // Get base price from address
 exports.getBasePrice = async (req, res) => {
@@ -8,6 +9,21 @@ exports.getBasePrice = async (req, res) => {
     
     if (!address) {
       return res.status(400).json({ message: 'Address is required' });
+    }
+
+    // Check if user is admin (endpoint supports optional authentication)
+    let isAdmin = false;
+    let userInfo = null;
+    
+    if (req.user && req.user.uid) {
+      const user = await User.findOne({ uid: req.user.uid });
+      if (user) {
+        isAdmin = user.isAdmin;
+        userInfo = { uid: user.uid, name: user.name, isAdmin: user.isAdmin };
+        console.log(`User ${req.user.uid} admin status: ${isAdmin}`);
+      }
+    } else {
+      console.log('Price check request without authentication (public access)');
     }
 
     // Convert address to lowercase for easier matching
@@ -37,8 +53,8 @@ exports.getBasePrice = async (req, res) => {
                (matchingCity.country && matchingCity.country.toLowerCase() === countryNameLower);
       });
 
-      // If country is found and disabled, prevent purchase
-      if (cityCountry && (!cityCountry.isAvailable || !cityCountry.isActive)) {
+      // If country is found and disabled, prevent purchase (unless admin)
+      if (cityCountry && (!cityCountry.isAvailable || !cityCountry.isActive) && !isAdmin) {
         return res.status(403).json({
           message: 'Property purchases are currently disabled for this country',
           type: 'country',
@@ -51,10 +67,10 @@ exports.getBasePrice = async (req, res) => {
         });
       }
 
-      // Check if city is available for purchase
+      // Check if city is available for purchase (unless admin)
       const isAvailable = matchingCity.isAvailable && matchingCity.isActive;
       
-      if (!isAvailable) {
+      if (!isAvailable && !isAdmin) {
         return res.status(403).json({
           message: 'Property purchases are currently disabled for this city',
           type: 'city',
@@ -66,23 +82,30 @@ exports.getBasePrice = async (req, res) => {
         });
       }
       
-      return res.status(200).json({
+      const response = {
         type: 'city',
         match: matchingCity.name,
         basePrice: matchingCity.value,
-        isAvailable: true
-      });
+        isAvailable: isAdmin ? true : isAvailable, // Always available for admins
+      };
+
+      // Add admin bypass info if applicable
+      if (isAdmin && !isAvailable) {
+        response.adminBypass = true;
+        response.note = 'Admin user can purchase despite city being disabled';
+        console.log(`Admin bypass enabled for disabled city: ${matchingCity.name}`);
+      }
+
+      return res.status(200).json(response);
     }
 
     // If no city match, try to find a matching country
-  
-
     if (matchingCountry) {
-      // Check if country is available for purchase
+      // Check if country is available for purchase (unless admin)
       const isAvailable = matchingCountry.isAvailable && matchingCountry.isActive;
       console.log('Matching country:', matchingCountry);
       
-      if (!isAvailable) {
+      if (!isAvailable && !isAdmin) {
         return res.status(403).json({
           message: 'Property purchases are currently disabled for this country',
           type: 'country',
@@ -94,12 +117,21 @@ exports.getBasePrice = async (req, res) => {
         });
       }
       
-      return res.status(200).json({
+      const response = {
         type: 'country',
         match: matchingCountry.name,
         basePrice: matchingCountry.value,
-        isAvailable: true
-      });
+        isAvailable: isAdmin ? true : isAvailable, // Always available for admins
+      };
+
+      // Add admin bypass info if applicable
+      if (isAdmin && !isAvailable) {
+        response.adminBypass = true;
+        response.note = 'Admin user can purchase despite country being disabled';
+        console.log(`Admin bypass enabled for disabled country: ${matchingCountry.name}`);
+      }
+
+      return res.status(200).json(response);
     }
 
     // If no matches found, return default base price
@@ -111,6 +143,7 @@ exports.getBasePrice = async (req, res) => {
     });
 
   } catch (error) {
+    console.error('Error in getBasePrice:', error);
     res.status(500).json({ message: error.message });
   }
 }; 

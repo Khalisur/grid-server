@@ -196,10 +196,67 @@ exports.buyProperty = async (req, res) => {
       return res.status(400).json({ message: 'You already own this property' });
     }
     
-    // Get buyer information
+    // Get buyer information to check admin status
     const buyer = await User.findOne({ uid: req.user.uid });
     if (!buyer) {
       return res.status(404).json({ message: 'Buyer not found' });
+    }
+
+    const isBuyerAdmin = buyer.isAdmin;
+    console.log(`Buyer ${buyer.uid} admin status: ${isBuyerAdmin}`);
+    
+    // Check city/country availability if buyer is not admin and property has an address
+    if (!isBuyerAdmin && property.address && property.address !== 'Grid Map Location') {
+      const addressLower = property.address.toLowerCase();
+      console.log('Checking availability for property address:', addressLower);
+      
+      // First try to find a matching city
+      const cities = await City.find();
+      const matchingCity = cities.find(city => {
+        const cityNameLower = city.name.toLowerCase();
+        return addressLower.includes(cityNameLower);
+      });
+      
+      if (matchingCity) {
+        const isAvailable = matchingCity.isAvailable && matchingCity.isActive;
+        if (!isAvailable) {
+          return res.status(403).json({
+            message: 'Property purchases are currently disabled for this city',
+            location: matchingCity.name,
+            reason: matchingCity.disabledReason,
+            disabledBy: matchingCity.disabledBy,
+            disabledAt: matchingCity.disabledAt,
+            propertyId: property.id,
+            propertyName: property.name
+          });
+        }
+      } else {
+        // If no city match, try to find a matching country
+        const countries = await Country.find();
+        const matchingCountry = countries.find(country => {
+          const countryNameLower = country.name.toLowerCase();
+          return addressLower.includes(countryNameLower);
+        });
+        
+        if (matchingCountry) {
+          const isAvailable = matchingCountry.isAvailable && matchingCountry.isActive;
+          if (!isAvailable) {
+            return res.status(403).json({
+              message: 'Property purchases are currently disabled for this country',
+              location: matchingCountry.name,
+              reason: matchingCountry.disabledReason,
+              disabledBy: matchingCountry.disabledBy,
+              disabledAt: matchingCountry.disabledAt,
+              propertyId: property.id,
+              propertyName: property.name
+            });
+          }
+        }
+      }
+    } else if (!isBuyerAdmin && property.address) {
+      console.log('Property has generic address, skipping location availability check');
+    } else if (isBuyerAdmin) {
+      console.log('Admin buyer bypassing location availability checks');
     }
     
     // Check if buyer has enough tokens
@@ -269,14 +326,19 @@ exports.buyProperty = async (req, res) => {
       await session.commitTransaction();
       session.endSession();
       
+      const responseMessage = isBuyerAdmin ? 
+        'Property purchased successfully (admin)' : 
+        'Property purchased successfully';
+      
       res.status(200).json({
-        message: 'Property purchased successfully',
+        message: responseMessage,
         property: {
           id: property.id,
           previousOwner: oldOwnerId,
           newOwner: req.user.uid,
           price: property.salePrice
-        }
+        },
+        adminPurchase: isBuyerAdmin
       });
     } catch (error) {
       // Abort transaction on error
@@ -314,9 +376,18 @@ exports.buyUnallocatedProperty = async (req, res) => {
         receivedData: req.body 
       });
     }
+
+    // Get user information to check admin status
+    const user = await User.findOne({ uid: req.user.uid });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isAdmin = user.isAdmin;
+    console.log(`User ${user.uid} admin status: ${isAdmin}`);
     
-    // Check availability if address is provided
-    if (address) {
+    // Check availability if address is provided AND user is not admin
+    if (address && !isAdmin) {
       const addressLower = address.toLowerCase();
       console.log('Address:', addressLower);
       
@@ -362,10 +433,12 @@ exports.buyUnallocatedProperty = async (req, res) => {
           }
         }
       }
+    } else if (address && isAdmin) {
+      console.log('Admin user bypassing availability checks for address:', address);
     }
     
     // Check maximum cell size limit
-    const maxCellSize = parseInt(process.env.MAX_CELL_SIZE) || 100; // Default to 100 if not set
+    const maxCellSize = parseInt(process.env.MAX_CELL_SIZE) || 100;
     if (cells.length > maxCellSize) {
       console.log('Maximum cell size exceeded:', cells.length, '>', maxCellSize);
       return res.status(400).json({ 
@@ -406,12 +479,6 @@ exports.buyUnallocatedProperty = async (req, res) => {
         message: 'Some cells are already owned by other users',
         ownedCells: existingCells
       });
-    }
-    
-    // Get user information
-    const user = await User.findOne({ uid: req.user.uid });
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
     }
     
     // Check if user has enough tokens
@@ -461,9 +528,14 @@ exports.buyUnallocatedProperty = async (req, res) => {
       await session.commitTransaction();
       session.endSession();
       
+      const responseMessage = isAdmin ? 
+        'Unallocated property purchased successfully (admin bypass)' : 
+        'Unallocated property purchased successfully';
+      
       res.status(201).json({
-        message: 'Unallocated property purchased successfully',
-        property: savedProperty
+        message: responseMessage,
+        property: savedProperty,
+        adminBypass: isAdmin
       });
     } catch (error) {
       // Abort transaction on error
@@ -510,6 +582,61 @@ exports.placeBid = async (req, res) => {
     const bidder = await User.findOne({ uid: req.user.uid });
     if (!bidder) {
       return res.status(404).json({ message: 'Bidder not found' });
+    }
+
+    const isBidderAdmin = bidder.isAdmin;
+    console.log(`Bidder ${bidder.uid} admin status: ${isBidderAdmin}`);
+    
+    // Check city/country availability if bidder is not admin and property has an address
+    if (!isBidderAdmin && property.address && property.address !== 'Grid Map Location') {
+      const addressLower = property.address.toLowerCase();
+      console.log('Checking availability for bidding on property address:', addressLower);
+      
+      // First try to find a matching city
+      const cities = await City.find();
+      const matchingCity = cities.find(city => {
+        const cityNameLower = city.name.toLowerCase();
+        return addressLower.includes(cityNameLower);
+      });
+      
+      if (matchingCity) {
+        const isAvailable = matchingCity.isAvailable && matchingCity.isActive;
+        if (!isAvailable) {
+          return res.status(403).json({
+            message: 'Cannot place bid: Property purchases are currently disabled for this city',
+            location: matchingCity.name,
+            reason: matchingCity.disabledReason,
+            disabledBy: matchingCity.disabledBy,
+            disabledAt: matchingCity.disabledAt,
+            propertyId: property.id,
+            propertyName: property.name
+          });
+        }
+      } else {
+        // If no city match, try to find a matching country
+        const countries = await Country.find();
+        const matchingCountry = countries.find(country => {
+          const countryNameLower = country.name.toLowerCase();
+          return addressLower.includes(countryNameLower);
+        });
+        
+        if (matchingCountry) {
+          const isAvailable = matchingCountry.isAvailable && matchingCountry.isActive;
+          if (!isAvailable) {
+            return res.status(403).json({
+              message: 'Cannot place bid: Property purchases are currently disabled for this country',
+              location: matchingCountry.name,
+              reason: matchingCountry.disabledReason,
+              disabledBy: matchingCountry.disabledBy,
+              disabledAt: matchingCountry.disabledAt,
+              propertyId: property.id,
+              propertyName: property.name
+            });
+          }
+        }
+      }
+    } else if (isBidderAdmin) {
+      console.log('Admin bidder bypassing location availability checks');
     }
     
     // Check if user already has a bid on this property
@@ -576,15 +703,20 @@ exports.placeBid = async (req, res) => {
       await session.commitTransaction();
       session.endSession();
       
+      const responseMessage = isBidderAdmin ? 
+        'Bid placed successfully (admin)' : 
+        'Bid placed successfully';
+      
       res.status(200).json({
-        message: 'Bid placed successfully',
+        message: responseMessage,
         bid: {
           userId: req.user.uid,
           amount,
           message: message || '',
           propertyId: property.id,
           status: 'active'
-        }
+        },
+        adminBid: isBidderAdmin
       });
     } catch (error) {
       // Abort transaction on error
@@ -635,10 +767,67 @@ exports.acceptBid = async (req, res) => {
     
     const bid = property.bids[bidIndex];
     
-    // Get the buyer
+    // Get the buyer (bidder)
     const buyer = await User.findOne({ uid: bid.userId });
     if (!buyer) {
       return res.status(404).json({ message: 'Buyer not found' });
+    }
+
+    const isBuyerAdmin = buyer.isAdmin;
+    console.log(`Bidder ${buyer.uid} admin status: ${isBuyerAdmin}`);
+    
+    // Check city/country availability if bidder is not admin and property has an address
+    if (!isBuyerAdmin && property.address && property.address !== 'Grid Map Location') {
+      const addressLower = property.address.toLowerCase();
+      console.log('Checking availability for bidder on property address:', addressLower);
+      
+      // First try to find a matching city
+      const cities = await City.find();
+      const matchingCity = cities.find(city => {
+        const cityNameLower = city.name.toLowerCase();
+        return addressLower.includes(cityNameLower);
+      });
+      
+      if (matchingCity) {
+        const isAvailable = matchingCity.isAvailable && matchingCity.isActive;
+        if (!isAvailable) {
+          return res.status(403).json({
+            message: 'Cannot accept bid: Property purchases are currently disabled for this city',
+            location: matchingCity.name,
+            reason: matchingCity.disabledReason,
+            disabledBy: matchingCity.disabledBy,
+            disabledAt: matchingCity.disabledAt,
+            propertyId: property.id,
+            propertyName: property.name,
+            bidderInfo: `Bidder ${buyer.name} cannot purchase properties in disabled locations`
+          });
+        }
+      } else {
+        // If no city match, try to find a matching country
+        const countries = await Country.find();
+        const matchingCountry = countries.find(country => {
+          const countryNameLower = country.name.toLowerCase();
+          return addressLower.includes(countryNameLower);
+        });
+        
+        if (matchingCountry) {
+          const isAvailable = matchingCountry.isAvailable && matchingCountry.isActive;
+          if (!isAvailable) {
+            return res.status(403).json({
+              message: 'Cannot accept bid: Property purchases are currently disabled for this country',
+              location: matchingCountry.name,
+              reason: matchingCountry.disabledReason,
+              disabledBy: matchingCountry.disabledBy,
+              disabledAt: matchingCountry.disabledAt,
+              propertyId: property.id,
+              propertyName: property.name,
+              bidderInfo: `Bidder ${buyer.name} cannot purchase properties in disabled locations`
+            });
+          }
+        }
+      }
+    } else if (isBuyerAdmin) {
+      console.log('Admin bidder bypassing location availability checks');
     }
     
     // Get the seller (current owner)
@@ -724,14 +913,19 @@ exports.acceptBid = async (req, res) => {
       await session.commitTransaction();
       session.endSession();
       
+      const responseMessage = isBuyerAdmin ? 
+        'Bid accepted successfully (admin buyer)' : 
+        'Bid accepted successfully';
+      
       res.status(200).json({
-        message: 'Bid accepted successfully',
+        message: responseMessage,
         transaction: {
           propertyId: property.id,
           previousOwner: oldOwnerId,
           newOwner: bid.userId,
           price: bid.amount
-        }
+        },
+        adminPurchase: isBuyerAdmin
       });
     } catch (error) {
       // Abort transaction on error
