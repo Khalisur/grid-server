@@ -9,6 +9,9 @@
     "seed": "node src/seed.js",
     "set-admin": "node src/scripts/set-admin.js",
     "test-admin": "node src/scripts/test-admin-bypass.js",
+    "test-treasure": "node src/scripts/test-treasure.js",
+    "test-treasure-purchase": "node src/scripts/test-treasure-purchase.js",
+    "fix-treasure-indexes": "node src/scripts/fix-treasure-indexes.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

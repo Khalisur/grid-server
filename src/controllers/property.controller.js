@@ -2,7 +2,90 @@ const Property = require('../models/property.model');
 const User = require('../models/user.model');
 const City = require('../models/city.model');
 const Country = require('../models/country.model');
+const Treasure = require('../models/treasure.model');
 const mongoose = require('mongoose');
+
+// Helper function to check if purchased cells are inside any treasure property
+const checkForTreasures = async (purchasedCells, buyerUid, session) => {
+  try {
+    // Get all active and unredeemed treasures
+    const activeTreasures = await Treasure.find({
+      isActive: true,
+      $expr: {
+        $lt: ['$currentRedemptions', '$maxRedemptions']
+      }
+    }).session(session);
+
+    if (activeTreasures.length === 0) {
+      return { foundTreasure: false };
+    }
+
+    console.log(`Checking ${activeTreasures.length} active treasures for purchased cells:`, purchasedCells);
+
+    for (const treasure of activeTreasures) {
+      // Skip if treasure is expired
+      if (treasure.expiresAt && treasure.expiresAt < new Date()) {
+        continue;
+      }
+
+      console.log(`Checking treasure "${treasure.name}" with cells:`, treasure.cells);
+
+      // Check if any purchased cell overlaps with treasure cells
+      const hasOverlap = purchasedCells.some(cell => treasure.cells.includes(cell));
+      
+      if (hasOverlap) {
+        const overlappingCells = purchasedCells.filter(cell => treasure.cells.includes(cell));
+        console.log(`🎉 TREASURE FOUND! User ${buyerUid} found treasure "${treasure.name}" in cells: ${overlappingCells.join(', ')}`);
+        
+        // Redeem the treasure within the transaction
+        if (treasure.maxRedemptions === 1) {
+          // Single-use treasure
+          treasure.isRedeemed = true;
+          treasure.redeemedBy = buyerUid;
+        } else {
+          // Multi-use treasure
+          treasure.currentRedemptions += 1;
+          if (treasure.currentRedemptions >= treasure.maxRedemptions) {
+            treasure.isRedeemed = true;
+          }
+        }
+        treasure.redeemedAt = new Date();
+        
+        // Save treasure changes within the session
+        await treasure.save({ session });
+        
+        // Give reward to user based on reward type within the transaction
+        if (treasure.rewardType === 'tokens') {
+          await User.findOneAndUpdate(
+            { uid: buyerUid },
+            { $inc: { tokens: treasure.rewardAmount } },
+            { session }
+          );
+          console.log(`Awarded ${treasure.rewardAmount} tokens to user ${buyerUid}`);
+        }
+
+        return {
+          foundTreasure: true,
+          treasure: {
+            id: treasure._id,
+            name: treasure.name,
+            description: treasure.description,
+            rewardType: treasure.rewardType,
+            rewardAmount: treasure.rewardAmount,
+            rewardMessage: treasure.rewardMessage,
+            treasureCells: treasure.cells,
+            overlappingCells: overlappingCells
+          }
+        };
+      }
+    }
+
+    return { foundTreasure: false };
+  } catch (error) {
+    console.error('Error checking for treasures:', error);
+    return { foundTreasure: false, error: error.message };
+  }
+};
 
 // Create a new property
 exports.createProperty = async (req, res) => {
@@ -322,15 +405,25 @@ exports.buyProperty = async (req, res) => {
         { session }
       );
       
-      // Commit transaction
+      // Check for treasures after successful property purchase
+      const treasureResult = await checkForTreasures(property.cells, req.user.uid, session);
+      
+      // Commit transaction only after all operations including treasure detection
       await session.commitTransaction();
       session.endSession();
       
-      const responseMessage = isBuyerAdmin ? 
+      // Prepare response message
+      let responseMessage = isBuyerAdmin ? 
         'Property purchased successfully (admin)' : 
         'Property purchased successfully';
+        
+      if (treasureResult.foundTreasure) {
+        responseMessage += ' - Treasure discovered!';
+        console.log('🎉 Treasure found in purchased property:', treasureResult.treasure);
+      }
       
-      res.status(200).json({
+      // Send response
+      const response = {
         message: responseMessage,
         property: {
           id: property.id,
@@ -339,7 +432,14 @@ exports.buyProperty = async (req, res) => {
           price: property.salePrice
         },
         adminPurchase: isBuyerAdmin
-      });
+      };
+      
+      if (treasureResult.foundTreasure) {
+        response.treasure = treasureResult.treasure;
+        response.isTreasure = true;
+      }
+      
+      res.status(200).json(response);
     } catch (error) {
       // Abort transaction on error
       await session.abortTransaction();
@@ -524,19 +624,36 @@ exports.buyUnallocatedProperty = async (req, res) => {
         { session }
       );
       
-      // Commit transaction
+      // Check for treasures after successful property creation
+      const treasureResult = await checkForTreasures(cells, req.user.uid, session);
+      
+      // Commit transaction only after all operations including treasure detection
       await session.commitTransaction();
       session.endSession();
       
-      const responseMessage = isAdmin ? 
+      // Prepare response message
+      let responseMessage = isAdmin ? 
         'Unallocated property purchased successfully (admin bypass)' : 
         'Unallocated property purchased successfully';
+        
+      if (treasureResult.foundTreasure) {
+        responseMessage += ' - Treasure discovered!';
+        console.log('🎉 Treasure found and redeemed:', treasureResult.treasure);
+      }
       
-      res.status(201).json({
+      // Send unified response
+      const response = {
         message: responseMessage,
         property: savedProperty,
         adminBypass: isAdmin
-      });
+      };
+      
+      if (treasureResult.foundTreasure) {
+        response.treasure = treasureResult.treasure;
+        response.isTreasure = true;
+      }
+      
+      res.status(201).json(response);
     } catch (error) {
       // Abort transaction on error
       await session.abortTransaction();
@@ -909,15 +1026,25 @@ exports.acceptBid = async (req, res) => {
         );
       }
       
-      // Commit transaction
+      // Check for treasures after successful bid acceptance
+      const treasureResult = await checkForTreasures(property.cells, bid.userId, session);
+      
+      // Commit transaction only after all operations including treasure detection
       await session.commitTransaction();
       session.endSession();
       
-      const responseMessage = isBuyerAdmin ? 
+      // Prepare response message
+      let responseMessage = isBuyerAdmin ? 
         'Bid accepted successfully (admin buyer)' : 
         'Bid accepted successfully';
+        
+      if (treasureResult.foundTreasure) {
+        responseMessage += ' - Treasure discovered!';
+        console.log('🎉 Treasure found through bid acceptance:', treasureResult.treasure);
+      }
       
-      res.status(200).json({
+      // Send response
+      const response = {
         message: responseMessage,
         transaction: {
           propertyId: property.id,
@@ -926,7 +1053,14 @@ exports.acceptBid = async (req, res) => {
           price: bid.amount
         },
         adminPurchase: isBuyerAdmin
-      });
+      };
+      
+      if (treasureResult.foundTreasure) {
+        response.treasure = treasureResult.treasure;
+        response.isTreasure = true;
+      }
+      
+      res.status(200).json(response);
     } catch (error) {
       // Abort transaction on error
       await session.abortTransaction();

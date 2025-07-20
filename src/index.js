@@ -13,6 +13,7 @@ const propertyRoutes = require('./routes/property.routes');
 const countryRoutes = require('./routes/country.routes');
 const cityRoutes = require('./routes/city.routes');
 const priceRoutes = require('./routes/price.routes');
+const treasureRoutes = require('./routes/treasure.routes');
 
 // Initialize app
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/properties', propertyRoutes);
 app.use('/api/countries', countryRoutes);
 app.use('/api/cities', cityRoutes);
 app.use('/api/price', priceRoutes);
+app.use('/api/treasures', treasureRoutes);
 
 // Root route
 app.get('/', (req, res) => {
